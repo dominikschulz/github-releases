@@ -29,6 +29,7 @@ var args struct {
 	User    string `arg:"required"`
 	Project string `arg:"required"`
 	Version string `arg:"required"`
+	URL     bool   `arg:""`
 }
 
 func main() {
@@ -41,6 +42,10 @@ func main() {
 	}
 
 	if r.Name != args.Version {
+		fmt.Printf("Latest: %s\n", r.Name)
+		if len(r.Assets) > 0 && args.URL {
+			fmt.Printf("URL: %s\n", r.Assets[0].URL)
+		}
 		os.Exit(1)
 	}
 	os.Exit(0)
