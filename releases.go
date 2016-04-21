@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/alexflint/go-arg"
 )
 
-var apiURL = "https://api.github.com/repos/%s/%s/releases/latest"
+var apiURL = "https://api.github.com/repos/%s/%s/releases"
 
 type Asset struct {
 	Id   int    `json:"id"`
@@ -28,21 +29,27 @@ type Release struct {
 var args struct {
 	User    string `arg:"required"`
 	Project string `arg:"required"`
-	Version string `arg:"required"`
+	Version string `arg:""`
 	URL     bool   `arg:""`
 }
 
 func main() {
 	arg.MustParse(&args)
 
-	r, err := fetchRelease(args.User, args.Project)
+	r, err := fetchLatestStableRelease(args.User, args.Project)
 	if err != nil {
 		fmt.Printf("Failed to fetch releases for %s/%s: %s", args.User, args.Project, err)
 		os.Exit(1)
 	}
 
+	if len(args.Version) < 1 {
+		fmt.Println(r.Name)
+		os.Exit(0)
+	}
+	args.Version = strings.TrimPrefix(args.Version, "v")
+	r.Name = strings.TrimPrefix(r.Name, "v")
 	if r.Name != args.Version {
-		fmt.Printf("Latest: %s\n", r.Name)
+		fmt.Printf("Not latest. Your Version %s - Latest: %s\n", args.Version, r.Name)
 		if len(r.Assets) > 0 && args.URL {
 			fmt.Printf("URL: %s\n", r.Assets[0].URL)
 		}
@@ -51,18 +58,30 @@ func main() {
 	os.Exit(0)
 }
 
-func fetchRelease(user, project string) (*Release, error) {
+func fetchLatestStableRelease(user, project string) (Release, error) {
 	url := fmt.Sprintf(apiURL, user, project)
 	resp, err := http.Get(url)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to fetch from %s: %s", url, err)
+		return Release{}, fmt.Errorf("Failed to fetch from %s: %s", url, err)
 	}
 	defer resp.Body.Close()
 
-	var r Release
-	err = json.NewDecoder(resp.Body).Decode(&r)
-	if err != nil {
-		return nil, err
+	if resp.StatusCode != 200 {
+		return Release{}, fmt.Errorf("Failed to fetch from %s: %d - %s", url, resp.StatusCode, resp.Status)
 	}
-	return &r, nil
+	var rs []Release
+	err = json.NewDecoder(resp.Body).Decode(&rs)
+	if err != nil {
+		return Release{}, err
+	}
+	if len(rs) < 1 {
+		return Release{}, fmt.Errorf("No releases")
+	}
+	for _, r := range rs {
+		if strings.Contains(r.Name, "beta") || strings.Contains(r.Name, "rc") {
+			continue
+		}
+		return r, nil
+	}
+	return Release{}, fmt.Errorf("No stable release found")
 }
