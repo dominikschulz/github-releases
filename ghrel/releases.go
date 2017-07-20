@@ -1,14 +1,11 @@
-package main
+package ghrel
 
 import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 	"time"
-
-	"github.com/alexflint/go-arg"
 )
 
 var apiURL = "https://api.github.com/repos/%s/%s/releases"
@@ -26,39 +23,7 @@ type Release struct {
 	Assets      []Asset   `json:"assets"`
 }
 
-var args struct {
-	User    string `arg:"required"`
-	Project string `arg:"required"`
-	Version string `arg:""`
-	URL     bool   `arg:""`
-}
-
-func main() {
-	arg.MustParse(&args)
-
-	r, err := fetchLatestStableRelease(args.User, args.Project)
-	if err != nil {
-		fmt.Printf("Failed to fetch releases for %s/%s: %s", args.User, args.Project, err)
-		os.Exit(1)
-	}
-
-	if len(args.Version) < 1 {
-		fmt.Println(r.Name)
-		os.Exit(0)
-	}
-	args.Version = strings.TrimPrefix(args.Version, "v")
-	r.Name = strings.TrimPrefix(r.Name, "v")
-	if r.Name != args.Version {
-		fmt.Printf("Not latest. Your Version %s - Latest: %s\n", args.Version, r.Name)
-		if len(r.Assets) > 0 && args.URL {
-			fmt.Printf("URL: %s\n", r.Assets[0].URL)
-		}
-		os.Exit(1)
-	}
-	os.Exit(0)
-}
-
-func fetchLatestStableRelease(user, project string) (Release, error) {
+func FetchLatestStableRelease(user, project string) (Release, error) {
 	url := fmt.Sprintf(apiURL, user, project)
 	resp, err := http.Get(url)
 	if err != nil {
