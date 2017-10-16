@@ -14,12 +14,19 @@ var args struct {
 	Project string `arg:"required"`
 	Version string `arg:""`
 	URL     bool   `arg:""`
+	Pre     bool   `arg:""`
 }
 
 func main() {
 	arg.MustParse(&args)
 
-	r, err := ghrel.FetchLatestStableRelease(args.User, args.Project)
+	var r ghrel.Release
+	var err error
+	if args.Pre {
+		r, err = ghrel.FetchLatestRelease(args.User, args.Project)
+	} else {
+		r, err = ghrel.FetchLatestStableRelease(args.User, args.Project)
+	}
 	if err != nil {
 		fmt.Printf("Failed to fetch releases for %s/%s: %s", args.User, args.Project, err)
 		os.Exit(1)
