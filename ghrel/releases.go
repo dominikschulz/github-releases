@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -46,6 +47,20 @@ func (r Release) Version() semver.Version {
 	return semver.Version{}
 }
 
+type Releases []Release
+
+func (r Releases) Len() int {
+	return len(r)
+}
+
+func (r Releases) Less(i, j int) bool {
+	return r[j].Version().LT(r[i].Version())
+}
+
+func (r Releases) Swap(i, j int) {
+	r[i], r[j] = r[j], r[i]
+}
+
 func fetchReleases(user, project string) ([]Release, error) {
 	url := fmt.Sprintf(BaseURL, user, project)
 	resp, err := http.Get(url)
@@ -62,43 +77,65 @@ func fetchReleases(user, project string) ([]Release, error) {
 	if err != nil {
 		return nil, err
 	}
+	sort.Sort(Releases(rs))
 
 	return rs, nil
 }
 
-func findStableRelease(rs []Release) (Release, error) {
+func filterStableReleases(rs []Release) []Release {
+	out := make([]Release, 0, len(rs))
 	for _, r := range rs {
 		if strings.Contains(r.Name, "beta") || strings.Contains(r.Name, "rc") || r.Draft || r.Prerelease {
 			continue
 		}
-		return r, nil
+		out = append(out, r)
 	}
-	return Release{}, fmt.Errorf("No stable release found")
+	return out
+}
+
+// FetchAllReleases will return all releases. The latest release will be at
+// position 0.
+func FetchAllReleases(user, project string) ([]Release, error) {
+	rs, err := fetchReleases(user, project)
+	if err != nil {
+		return nil, err
+	}
+	if len(rs) < 1 {
+		return rs, fmt.Errorf("No releases")
+	}
+	return rs, nil
 }
 
 // FetchLatestRelease will simply return the latested release, possibly a pre
 // release.
 func FetchLatestRelease(user, project string) (Release, error) {
-	rs, err := fetchReleases(user, project)
+	rs, err := FetchAllReleases(user, project)
 	if err != nil {
 		return Release{}, err
 	}
-	if len(rs) < 1 {
-		return Release{}, fmt.Errorf("No releases")
-	}
 	return rs[0], nil
+}
+
+// FetchAllStableReleases will return all stable releases. The latest release
+// will be at position 0.
+func FetchAllStableReleases(user, project string) ([]Release, error) {
+	rs, err := fetchReleases(user, project)
+	if err != nil {
+		return []Release{}, err
+	}
+	if len(rs) < 1 {
+		return []Release{}, fmt.Errorf("No releases")
+	}
+	return filterStableReleases(rs), nil
 }
 
 // FetchLatestStableRelease will return the latest stable release. This will
 // exclude any releases marked as draft, prerelease or containing a pre-release
 // marker in the name
 func FetchLatestStableRelease(user, project string) (Release, error) {
-	rs, err := fetchReleases(user, project)
+	rs, err := FetchAllStableReleases(user, project)
 	if err != nil {
 		return Release{}, err
 	}
-	if len(rs) < 1 {
-		return Release{}, fmt.Errorf("No releases")
-	}
-	return findStableRelease(rs)
+	return rs[0], nil
 }
